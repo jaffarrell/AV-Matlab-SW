@@ -1,0 +1,14 @@
+*.mat
+*.aux
+*.asv
+*.bbl
+*.blg
+*.drv
+*.dvi
+*eps-converted-to.pdf
+*.gz
+*.log
+*.obj
+*.out
+*.ps
+*.toc
