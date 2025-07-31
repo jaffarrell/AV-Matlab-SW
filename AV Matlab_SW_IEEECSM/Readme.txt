@@ -2,7 +2,7 @@ This directory contains the following m-files:
 
 -- allan.m: Implements the Allan variance computation as a function.  The authors of this function are documented in the header to the file. 
 
--- ASD_plot_generation.m: Given parameters that define a state-space model for the sensor stochastic errors, this function: 
+-- ASD_plot_generation_secondorder.m: Given parameters that define a second-order state-space model for the sensor stochastic errors, this function: 
 (1) computes the state-space model in continuous-time and converts to discrete-time, 
 (2) simulates that model to produce a stochastic error sequence, 
 (3) computes and plots the ASD.

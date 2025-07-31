@@ -45,6 +45,8 @@ clear all;
 % Task 1 - Define various parameters, set-up the continuous-time model, and
 %          convert it to a discrete-time model
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% This script uses a two-state model to match the ASD plot for delay in the
+% range from 0.01 through 1000 seconds
 
 % Sensor sampling frequency
 Fs=100;                 % sample frequency, Hz (instrument dependent)
@@ -107,18 +109,15 @@ S_w_z=[Sb 0;
 % GPS with High Rate Sensors, McGraw-Hill, 2008.
 %
 % Continuous to discrete transformation using eqn. (4.114) of [3]
-A_c(1:2,1:2) = -1*A_t;
-A_c(1:2,3:4) = B_t * S_w_z * B_t';
-A_c(3:4,3:4) = A_t';
-
-A_c = A_c*dT;
-B_c = expm(A_c);
+Ac = [-A_t          (B_t*S_w_z*B_t')
+       zeros(2,2)   A_t']*dT;
+B_c = expm(Ac);
 
 % From eqn. (4.115) of [3]
-Phi = B_c(3:4,3:4)';
+Phi = B_c(3:4,3:4)'
 
 % From eqn. (4.116) of [3]
-Qd  = Phi * B_c(1:2,3:4);
+Qd  = Phi * B_c(1:2,3:4)
 
 % Discrete time bias instability driving noise
 Qbk = Qd(1,1);
@@ -143,30 +142,28 @@ if rerun == 1
     sQbk = sqrt(Qbk);
     sQkk = sqrt(Qkk);
     sQnk = sqrt(Qnk);      
+    Z_b  = zeros(2,L_n);    % preallocation
     Z    = zeros(L_n,1);    % preallocation
+    n_n  = sQnk * randn(L_n,1);
     % Initial error state
-    Z_b=[0;0];
-    for ij=1:L_n
+    Z_b(:,1)=[0;0];   % TODO: initialize by steady-state cov., not zero
+    for ij=2:L_n
         % Generate random noise 
         n_b = sQbk * randn(1,1);
         n_k = sQkk * randn(1,1);
-        n_n = sQnk * randn(1,1);
+
         % IEEE CSM eqn. (44) 
-        Z_b = Phi*Z_b + [n_b;n_k];
+        Z_b(:,ij) = Phi*Z_b(:,ij-1) + [n_b;n_k];
         % IEEE CSM eqn. (45) 
-        Z(ij,1)= C_t * Z_b + n_n;
+        Z(ij,1)= C_t * Z_b(:,ij) + n_n(ij,1);
     end
-    save data_Z.mat Z
+    save data_Z.mat Z n_n Z_b
 else
     load data_Z.mat
 end
 
 %-------------------------%
 %--------Task 3-----------%
-display('Computing ASD for simulated data')
-% Computing Allan variance plot
-data.freq=Z;
-data.rate=Fs;
 % Define the cluster times
 tau1=[0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09];
 tau2=10*dT:10*dT:90*dT;
@@ -174,20 +171,45 @@ tau3=100*dT:100*dT:900*dT;
 tau4=1000*dT:1000*dT:9000*dT;
 tau5=10000*dT:10000*dT:90000*dT;
 tau6=100000*dT:100000*dT:900000*dT;
-tau7=1000000*dT:1000000*dT:4000000*dT;
-tau=[tau1 tau2 tau3 tau4 tau5 tau6 tau7]';
-% Compute AV
-[avar]=allan(data, tau);
+tau=[tau1 tau2 tau3 tau4 tau5 tau6]';
+
+% Computing Allan variance plot
+display('Computing ASD for simulated data for Z')
+data.freq=Z;
+data.rate=Fs;
+[avar_Z]=allan(data, tau);
+allan_sd_Z  = avar_Z.sig2;
+display('Computing ASD for simulated data for n_n')
+data.freq=n_n;
+data.rate=Fs;
+[avar_n]=allan(data, tau);
+allan_sd_n  = avar_n.sig2;
+display('Computing ASD for simulated data for Z_K')
+data.freq= Z_b(2,:);
+data.rate=Fs;
+[avar_ZK]=allan(data, tau);
+allan_sd_ZK  = avar_ZK.sig2;
+display('Computing ASD for simulated data for Z_b')
+data.freq= Z_b(1,:);
+data.rate=Fs;
+[avar_ZB]=allan(data, tau);
+allan_sd_ZB  = avar_ZB.sig2;
 
 % Allan SD is in sig2 field of avar structure
-allan_sd=avar.sig2;
-figure
-loglog(tau,allan_sd,'b.','LineWidth',2)
-xlabel('Cluster time (sec)','FontSize',14)
+figure(1), clf
+loglog(tau,allan_sd_Z,'ko','LineWidth',2)
+hold on
+loglog(tau,allan_sd_n,'b.','LineWidth',2)
+loglog(tau,allan_sd_ZK,'m.','LineWidth',2)
+loglog(tau,allan_sd_ZB,'g.','LineWidth',2)
+hold off
+xlabel('Cluster time, \tau, (sec)','FontSize',14)
 ylabel('Allan SD (m/s^2)','FontSize',14)
 ylim([1e-4 1e-1]);
+xlim([0.01,1000])
 grid on;
 title('ASD plot from generated data')
+legend('Overall','White error','Bias RW','Bias Instab.')
 
 
 
