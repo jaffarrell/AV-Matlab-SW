@@ -7,6 +7,8 @@ This directory contains the following m-files:
 (2) simulates that model to produce a stochastic error sequence, 
 (3) computes and plots the ASD.
 
+-- ASD_plot_generation_firstorder.m: iven parameters that define a second-order state-space model for the sensor stochastic errors, this function implements the same three steps as above. 
+
 -- CSM_GM_error_model_example.m: computes B from sigma_B and sigma_G
 
 -- opt_NBK_search.m: Implements an optimization based approach to selecting the state-space model parameters for the problem defined in Section VIII.B of the paper. 
