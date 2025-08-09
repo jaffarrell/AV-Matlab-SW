@@ -40,6 +40,7 @@
 
 clc;
 clear all;
+format compact
 
 %%-------------------------%
 % Task 1 - Define various parameters, set-up the continuous-time model, and
@@ -83,6 +84,9 @@ mu_b=1/TB;              % IEEE CSM eqn. (34)
 % PSD parameter for bias instability
 Sb =B^2/(0.4365^2)/(TB) 
 
+% Steady-State covariance of correlated error
+Pb_ss_c = Sb/2/mu_b
+
 % Continuous-time state-space model 
 % See IEEE CSM eqn. (40)
 A_t=[-mu_b ];
@@ -99,7 +103,7 @@ S_w_z=[Sb];
 %
 % Continuous to discrete transformation using eqn. (4.114) of [3]
 Ac = [-A_t          (B_t*S_w_z*B_t')
-       0   A_t']*dT;
+       0   A_t']*dT
 B_c = expm(Ac);
 
 % From eqn. (4.115) of [3]
