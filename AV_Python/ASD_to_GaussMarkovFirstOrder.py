@@ -96,6 +96,12 @@ class ASD_to_GaussMarkovFirstOrder:
         self.Qn = self.Sn * self.Fs       # Discrete time random walk process noise. See (62) in [1]
         self.Pb_ss_d = self.Qb / (1 - self.Phi**2)  # Steady-state covariance of the bias process
 
+    def get_Pb_ss(self):
+        if (self.Pb_ss_c - self.Pb_ss_d)/self.Pb_ss_c > 1e-3:
+            print(f"Warning: Continuous-time steady-state covariance Pb_ss_c ({self.Pb_ss_c:.4e}.) "
+                  f"differs from discrete-time Pb_ss_d ({self.Pb_ss_d:.4e}).")   
+        return self.Pb_ss_d
+
     def print_discrete_time_model(self):
         """
         Print the discrete-time model of the Gauss-Markov First Order process.
@@ -103,8 +109,8 @@ class ASD_to_GaussMarkovFirstOrder:
         print(f"Discrete-time model is (units depend on context): ")
         print(f"\t   z[k] = b[k] + n[k],")
         print(f"\t b[k+1] = {self.Phi:.4f} * b[k] + w[k],")
-        print(f"where n[k] is white noise with covariance Qn = {self.Qn:.4e}")
-        print(f"and w[k] is the bias process with PSD Qw = {self.Qb:.4e}.")
+        print(f"where n[k] is white noise with covariance Qn = {self.Qn:.4e} (std {np.sqrt(self.Qn):.4e})")
+        print(f"and w[k] is the bias process with covariance Qw = {self.Qb:.4e} (std {np.sqrt(self.Qb):.4e}).")
         print(f"The steady-state covariance of the bias process is Pb_ss_d = {self.Pb_ss_d:.4e}.\n")
 
     def simulate_discrete_time_model(self, duration=10, show_plots=True):
@@ -149,3 +155,103 @@ class ASD_to_GaussMarkovFirstOrder:
             plt.show()
 
         return z, b, n 
+    
+    def robust_standard_deviation(self, data):
+        """
+        Compute the Median Absolute Deviation (MAD) of the data.
+        :param data: Input data for which the MAD is to be computed.
+        :return: The computed MAD value.
+        """
+        median = np.median(data)
+        mad = np.median(np.abs(data - median))
+        std = mad * 1.4826  # Scale factor for normal distribution
+        return std 
+
+    def test_cov(self, data, T_avg = 1.0, T_int = 1.0, T_shft = 1.0, MaxRep = 1000):
+        """
+        Plot sample error trajectories against the model prediction of their standard deviation.
+               average                 integrate 
+        --|---------------------|----------------------|--------
+         t0                   t0+T_avg            t0+T_avg+T_int  
+        t1 = t0 + T_shft
+                           average                 integrate 
+        ----------|---------------------|----------------------|--------
+                 t1                   t1+T_avg            t1+T_avg+T_int  
+        :param data: Input data for which the covariance is to be computed.
+        :param T_avg: Duration over which the data is averaged to estimate the bias.
+        :param T_int: Duration over which the data and covariance are integrated.
+        :param T_shft: Interval over which the data is shifted before repeating the process
+        """  
+        if T_shft > (T_avg + T_int):  # min value for no overlap
+            T_shft = T_avg + T_int
+            print(f"Warning: T_shft ({T_shft}) changed to T_avg + T_int = {T_avg + T_int}.")
+        N_avg_smpls = int(self.Fs * T_avg)  # Number of samples for averaging
+        N_int_smpls = int(self.Fs * T_int)  # Number of samples for integration
+        N_shft_smpls = int(self.Fs * T_shft)  # Number of samples for shifting
+
+        print(f"T_avg = {T_avg} seconds, T_int = {T_int} seconds, T_shft = {T_shft} seconds.")
+        print(f"Number of samples for averaging: {N_avg_smpls}, "
+              f"Number of samples for integration: {N_int_smpls}, "
+              f"Number of samples for shifting: {N_shft_smpls}.")
+        print(f"Fs = {self.Fs} Hz, Ts = {self.Ts} seconds.")
+
+        N_data = len(data)  # Total number of samples in the data
+        N_rep = min(int(N_data / (N_avg_smpls+N_int_smpls) ), MaxRep)
+        # simulate the covariance
+        P_theory = np.zeros(N_int_smpls)  # Preallocate the covariance array
+        P_b = np.zeros(N_int_smpls)  # Preallocate the bias covariance array
+        P_z = np.zeros(N_int_smpls)  # Preallocate the measurement covariance array
+        self.print_discrete_time_model()
+        
+        P_b[0] = self.get_Pb_ss()    # Initial bias covariance
+        for i in range(1,N_int_smpls):
+            P_b[i] = self.Phi * P_b[i-1] * self.Phi.T + self.Qb
+            P_z[i] = P_b[i] + self.Qn
+            P_theory[i] = P_theory[i-1] + P_z[i] * self.Ts**2  # Cumulative phase covariance
+        std_b = np.sqrt(P_b)         # Standard deviation of the frequency bias
+        std_z = np.sqrt(P_z)         # Standard deviation of the frequency error
+        std_theory = np.sqrt(P_theory)  # Standard deviation of the phase error
+
+        # compute sample error trajectories
+        bias = np.zeros(N_rep)  # Preallocate the bias array
+        phserr = np.zeros((N_rep, N_int_smpls))  # Preallocate the error array
+        for i in range(N_rep):
+            N_start = i * N_shft_smpls  # Starting index for the current segment
+            N_middle = N_start + N_avg_smpls  # Middle index for the current segment
+            N_end = N_middle + N_int_smpls  # End index for the current segment
+            # Average the data to estimate the bias 
+            idx4bias    = range(N_start, N_middle)
+            bias[i]     = np.mean(data[idx4bias])  # Average the data to estimate the bias
+            idx4int     = range(N_middle, N_middle + N_int_smpls)
+            phserr[i,:] = np.cumsum(data[idx4int] - bias[i]) * self.Ts  # Integrate the phase error trajectory
+
+        phsErrStd = np.zeros(N_int_smpls)  # Preallocate the phase error standard deviation array
+        # Calculate the standard deviation of the phase error at each sample
+        for j in range(0,N_int_smpls):
+            phsErrStd[j] = self.robust_standard_deviation(phserr[:,j])  # Standard deviation of the phase error at each sample
+
+        # Plot the results
+        tm = np.arange(0, N_int_smpls) * self.Ts
+        plt.figure(figsize=(10, 6))
+        for i in range(N_rep):
+            plt.plot(tm, phserr[i,:],  linestyle='--', linewidth=0.5, alpha = 0.5)
+        #plt.plot(tm,  std_b,  linestyle='--', color='black', linewidth=1)
+        #plt.plot(tm, -std_b,  linestyle='--', color='black', linewidth=1)
+        plt.plot(tm,  std_theory, linestyle='-', color='black', linewidth=1)
+        plt.plot(tm, -std_theory, linestyle='-', color='black', linewidth=1)
+        plt.plot(tm,  phsErrStd, linestyle='-', color='blue', linewidth=1)
+        plt.plot(tm, -phsErrStd, linestyle='-', color='blue', linewidth=1)
+        plt.title('Sample Error Trajectories and Standard Deviation')
+        plt.xlabel('Time (samples)')
+        plt.ylabel('Error Trajectories and Standard Deviation')
+        plt.ylim([-5*std_theory.max(), 5*std_theory.max()])
+        plt.grid()
+        plt.show()
+
+        #plt.figure(figsize=(10, 6))
+        #plt.scatter(range(N_rep), bias, label='Bias Estimate', color='orange')
+        #plt.title('Bias Estimate from Sample Data')
+        #plt.xlabel('Repetition Index')
+        #plt.ylabel('Bias Estimate')
+        #plt.grid()
+        #plt.show()
