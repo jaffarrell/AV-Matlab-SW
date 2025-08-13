@@ -91,10 +91,10 @@ class ASD_to_GaussMarkovFirstOrder:
                        [0, A]]) * self.Ts
         B_c = expm(Ac)  
         # Discrete-time model parameters
-        self.Phi = B_c[1, 1]              # From eqn. (4.115) of [2]
-        self.Qb  = self.Phi * B_c[0, 1]   # Process noise covariance, from eqn. (4.116) of [3]
+        self.phi = B_c[1, 1]              # From eqn. (4.115) of [2]
+        self.Qb  = self.phi * B_c[0, 1]   # Process noise covariance, from eqn. (4.116) of [3]
         self.Qn = self.Sn * self.Fs       # Discrete time random walk process noise. See (62) in [1]
-        self.Pb_ss_d = self.Qb / (1 - self.Phi**2)  # Steady-state covariance of the bias process
+        self.Pb_ss_d = self.Qb / (1 - self.phi**2)  # Steady-state covariance of the bias process
 
     def get_Pb_ss(self):
         if (self.Pb_ss_c - self.Pb_ss_d)/self.Pb_ss_c > 1e-3:
@@ -108,7 +108,7 @@ class ASD_to_GaussMarkovFirstOrder:
         """
         print(f"Discrete-time model is (units depend on context): ")
         print(f"\t   z[k] = b[k] + n[k],")
-        print(f"\t b[k+1] = {self.Phi:.4f} * b[k] + w[k],")
+        print(f"\t b[k+1] = {self.phi:.4f} * b[k] + w[k],")
         print(f"where n[k] is white noise with covariance Qn = {self.Qn:.4e} (std {np.sqrt(self.Qn):.4e})")
         print(f"and w[k] is the bias process with covariance Qw = {self.Qb:.4e} (std {np.sqrt(self.Qb):.4e}).")
         print(f"The steady-state covariance of the bias process is Pb_ss_d = {self.Pb_ss_d:.4e}.\n")
@@ -130,7 +130,7 @@ class ASD_to_GaussMarkovFirstOrder:
 
         # Simulate the process
         for i in range(1, len(t)):
-            b[i] = self.Phi * b[i-1] + w[i]  # Update bias
+            b[i] = self.phi * b[i-1] + w[i]  # Update bias
 
         z = b + n  # Measurement    
 
@@ -203,13 +203,31 @@ class ASD_to_GaussMarkovFirstOrder:
         P_z = np.zeros(N_int_smpls)  # Preallocate the measurement covariance array
         self.print_discrete_time_model()
         
-        P_b[0] = self.get_Pb_ss()    # Initial bias covariance
-        for i in range(1,N_int_smpls):
-            P_b[i] = self.Phi * P_b[i-1] * self.Phi.T + self.Qb
-            P_z[i] = P_b[i] + self.Qn
-            P_theory[i] = P_theory[i-1] + P_z[i] * self.Ts**2  # Cumulative phase covariance
-        std_b = np.sqrt(P_b)         # Standard deviation of the frequency bias
-        std_z = np.sqrt(P_z)         # Standard deviation of the frequency error
+        # setup the discrete-time state-space model 
+        # with state vector x = [phase, bias]
+        # x(k+1) = Phi * x(k) + Gam * w(k)
+        Phi = np.zeros((2, 2))
+        Phi[0, 0] = 1         # Phase integration
+        Phi[0, 1] = self.Ts   # Phase integration of frequency error
+        Phi[1, 1] = self.phi  # Bias state transition
+        Gam = np.zeros((2, 2))
+        Gam[0, 0] = self.Ts  # integrate phase RW noise
+        Gam[1, 1] = self.Ts  # integrate bias process noise
+        Q = np.zeros((2, 2))  # Preallocate the process noise covariance
+        Q[0, 0] = self.Qn
+        Q[1, 1] = self.Qb
+        P = np.zeros((2, 2))  # Preallocate the error state covariance
+        P[1, 1] = self.get_Pb_ss()
+        P_b      = np.zeros(N_int_smpls)  # Preallocate the bias covariance array
+        P_theory = np.zeros(N_int_smpls)  # Preallocate the theoretical covariance array
+        P_theory[0] = P[0,0]
+        P_b[0] = P[1,1]
+        for i in range(1, N_int_smpls):
+            P = Phi @ P @ Phi.T + Gam @ Q @ Gam.T  # Update the error state covariance
+            P_theory[i] = P[0, 0]
+            P_b[i] = P[1, 1]
+        #std_b = np.sqrt(P_b)            # Standard deviation of the frequency bias
+        #std_z = np.sqrt(P_z)            # Standard deviation of the frequency error
         std_theory = np.sqrt(P_theory)  # Standard deviation of the phase error
 
         # compute sample error trajectories

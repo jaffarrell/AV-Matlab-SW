@@ -12,3 +12,4 @@
 *.out
 *.ps
 *.toc
+*.pyc
