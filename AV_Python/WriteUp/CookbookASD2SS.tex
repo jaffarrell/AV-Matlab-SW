@@ -1,0 +1,89 @@
+\documentclass[letter,twocolumn]{article}
+
+\usepackage{geometry}
+\geometry{
+		total={7.5in,10in},
+	}
+
+\input{settings} 
+
+\begin{document}
+	\title{ASD to State-Space Recipe Book}
+\author{Jay~A.~Farrell}
+\maketitle
+
+\begin{abstract}
+This article walks through the process for extracting first-order state-space (Gauss-Markov) models corresponding to an ASD plot for a range of delays.
+This article skips all derivations, many of which are presented or pointed to in \cite{CSM_IMU}.
+
+This methods herein apply to both gyros and accelerometers. 
+To be generic, the article will use the terminology of phase and frequency. 
+The term {\em frequency} refers to the either the IMU angular rate or specific force measurement.
+The term {\em phase} refers to the integral of frequency, which for an IMU refers to attitude or velocity. 
+
+Given values of $N$, $B$, $T_p$, and $F_s$, the script ASD\_to\_GaussMarkovFirstOrder.py implements all the computations that are presented herein in a \blue blue \black font.  
+\end{abstract}
+
+\section{ASD Graph to State-Space Model}
+
+This section assumes that an ASD plot is available. 
+Samples of an example ASD curve are shown as blue dots in the figures herein.
+\begin{enumerate}
+	\item Find the portion of the ASD graph that has a slope of -1/2. Draw a tangent line, and define phase random walk parameter $N$ as the value of this ASD tangent line where it crosses the vertical line at $\tau = 1$. See the example orange lines in Fig. \ref{fig:ASD_plot_N_B}.
+	
+	\begin{figure}[htb]
+		\centering
+		\includegraphics[trim=0in 0in 0in 0.1in, clip, width=0.8\columnwidth]{figure/ASD_plot_N_B}
+		\caption{Allan Standard Deviation Plot marked for estimation of $N$ and $B$. 
+			The slanted orange line with slope -1/2 intersects the vertical line at $\tau=1$ for $N$ = 3.3e-3 m/s/s/rtHz. The horizontal dashed green line defines $B=8.0 e-3$ m/s/s. }
+		\label{fig:ASD_plot_N_B}
+	\end{figure}
+	
+	\item The continuous-time phase random walk power spectral density is \blue $S_n=N^2$. \black
+	\item The discrete-time phase random walk covariance is \blue $Q_\nu = S_n \, F_s$. \black
+	\item The values of $B$ and $T_p$ are selected together. 
+	\begin{itemize}
+		\item 	By definition $B$ is the value of the ASD plot at which its slope is zero. For many inexpensive IMU's this flat section may not exist or may be difficult to select due to the noisiness of the ASD plot. 
+		The ASD plot in Fig. \ref{fig:ASD_plot_N_B} is very clean and a reasonable value of $B$ can be read off. 
+		\item There is not finite-dimensional state space-model that can exactly reproduce the bias instabiility. See \cite{CSM_IMU}.
+		
+		\item This example selects the first-order model 
+		\begin{align} \label{eqn:GM}
+			\dot{b}(t) = -\mu \, b(t) + \omega(t)
+		\end{align}
+		to approximate the bias instability portion of the ASD plot. 
+		The shape of the ASD plot corresponding to this model is sketched as the green asymptotes and black curve in Fig. \ref{fig:ASD_plot_N_B}. 
+		It has a peak at $T_p$ and and the asymptotes have slope $\pm 1/2$;
+		therefore, for delays near, but smaller that $T_p$, the parameters $B$ and $T_p$ can be selected to produce a flat region with the desired height. 
+		Given values for $B$ and $T_p$, the script computes:
+		\begin{align*}
+		\blue \T_b &= \blue \frac{T_p}{1.89}, \black && \mbox{a parameter for the ASD model} \\
+		\blue \mu &= \blue\frac{1}{T_b} \black  && \mbox{the decay rate in eqn. \eqref{eqn:GM}} \\
+		\blue S_b &= \blue\frac{B^2}{0.4365^2\,T_b} \black && \mbox{PSD of } \omega(t) \\
+		\blue \bar{P}_b & = \blue\frac{S_b}{2\,\mu} \black && \mbox{steady state covariance of } b(t) 
+		\end{align*}
+	\end{itemize}
+
+\end{enumerate}
+
+\begin{figure}[tbh]
+	\centering
+	\includegraphics[trim=0in 0in 0in 0.1in, clip, width=0.8\columnwidth]{figure/ASD_plot_B_GM}
+	\caption{Allan Standard Deviation Plot marked with approximations for the first-order Gauss-Markov model. }
+	\label{fig:ASD_plot_B_GM}
+\end{figure}
+
+The script also provides tools to convert the continuous-time model to and equivalent discrete-time model, to simulate the model of produce sample data, and to plot the Allan standard deviation plots. The red dots in Fig. \ref{fig:ASD_plot}  show the results of this process.
+
+\begin{figure}[tbh]
+	\centering
+	\includegraphics[trim=0in 0in 0in 0.1in, clip, width=0.9\columnwidth]{figure/ASD_plot}
+	\caption{Allan Standard Deviation Plot.}
+	\label{fig:ASD_plot}
+\end{figure}
+
+\vfill
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs.bib}
+\end{document}

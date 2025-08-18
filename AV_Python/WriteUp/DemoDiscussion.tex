@@ -13,24 +13,43 @@
 \maketitle
 
 \begin{abstract}
-This article presents and discusses example results of the Python Jupyter notebook:
+This article presents and discusses example results generated using the Python Jupyter notebook:
 \begin{verbatim}
 	Demo_FirstOrderGM_AccelMarbleSlab.ipynb
 \end{verbatim}
-It should exist in the same directory as this pdf file. 
+It should exist in the same repository as this pdf file. 
+
+Before running the notebook, unzip the file:
+\begin{verbatim}
+parsed_isolated_marble_data_az.zip
+\end{verbatim} 
+in the AV\_Matlab\_SW\_IEEECSM directory,
+to extract the parsed\_isolated\_marble\_data\_az.mat file.
+The results herein were produced using the following parameter settings: 
+\begin{itemize}
+	\item sample frequency $Fs = 100$ Hz,
+	\item velocity random walk $N  = 3.3e-3$ m/s/s/rtHz = m/s/rtsec,
+	\item bias instability $B  = 9e-4$ m/s/s,
+	\item desired delay for the Gauss-Markov ASD peak $T_p = 300$ sec.,
+	\item state-space simulation duration 10e3 sec. (1e6 samples),
+	\item covariance test average time $T\_avg = 10$ seconds, and
+	\item covariance test integration time $T\_int = 20$ seconds.
+\end{itemize}
 \end{abstract}
 
 \section{Problem Setup}
-The blue dots in Fig. \ref{fig:ASD_plot} show samples of the Allan Standard Deviation (ASD) curve for an accelerometer for delays $\tau\in[0.01, 500]$ seconds. The sample frequency is $F_s = 100$ Hz.
+The blue dots in Fig. \ref{fig:ASD_plot} show samples of the Allan Standard Deviation (ASD) curve for an accelerometer for delays $\tau\in[0.01, 500]$ seconds.
 
 
-The optimal estimator that we are building requires a finite-dimensional, discrete-time state-space model for the stochastic error in the IMU output that has the form
+The optimal estimator that we are building requires a finite-dimensional, discrete-time, state-space model for the stochastic error in each IMU output.
+The model for each output has the form:
 \begin{align}
 	\Boldx(k+1) &= \BoldPhi\, \Boldx(k) + \BoldGamma \, \Boldomega(k) \\
 	z(k)   &= \BoldC \,  \Boldx(k) + \nu(k),
 \end{align}
 where $\Boldx\in\Re^n$, $z(k)$ is scalar, and the matrices have appropriate dimensions. 
 Both $\Boldomega\sim N(\0,\BoldQ_\omega)$ and $\nu\sim N(0,Q_\nu)$ are white and Gaussian. 
+The goal is to specify the model parameters: $n$, $\BoldPhi$, $\BoldGamma$, $\BoldC$, $\BoldQ_\omega$, and $Q_\nu$.
 
 There is no finite-dimensional model that can match the ASD curve for all delays $\tau$.
 The approximate fit to the curve can be improved by increasing $n$; however \cite{CSM_IMU}:
@@ -39,15 +58,16 @@ The approximate fit to the curve can be improved by increasing $n$; however \cit
 	\item Adding states can have a negative impact on observability that can negatively impact performance.
 \end{itemize} 
 The purpose of the state-space model is to communicate to the estimator the magnitude and correlation properties 
-of the IMU output stochastic error sequence of the time intervals relevant to the estimator. 
+of the IMU output stochastic error sequence over the time intervals relevant to the estimator. 
 The lowest order state-space model that can do the job should be selected.
 
 
 \section{Specifications}
-For this example the goal is to match (or be slightly above) the ASD graph for delays $\tau\in[T_s, 100]$ seconds, where $T_s = \frac{1}{F_s}$.
+For this example the goal is to approximately match the ASD graph for delays $\tau\in[T_s, 100]$ seconds, where $T_s = \frac{1}{F_s}$. This range is selected because the INS approach will integrate at 100Hs and is expected to receive aiding signals at one Hertz with gaps between measurements not to exceed 10 s. 
+If aiding measurements are absent for greater than 10s, the propagated covariance will still reflect the accuracy of the navigation for several 10's of seconds while other actions take place. 
 
 
-\begin{figure}[bth]
+\begin{figure}[tbh]
 	\centering
 	\includegraphics[trim=0in 0in 0in 0.1in, clip, width=0.9\columnwidth]{figure/ASD_plot}
 	\caption{Allan Standard Deviation Plot.}
