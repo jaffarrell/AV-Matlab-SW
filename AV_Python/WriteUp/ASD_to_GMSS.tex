@@ -1,0 +1,158 @@
+\documentclass[letter,twocolumn]{article}
+
+\usepackage{geometry}
+\geometry{
+		total={7.5in,9.75in},
+	}
+
+\input{settings} 
+
+\begin{document}
+	\title{Allan Standard Deviation to Gauss-Markov State-Space Model:  \\ Cookbook with Example}
+\author{Jay~A.~Farrell}
+\maketitle
+
+\begin{abstract}
+This article walks through the process for extracting first-order, Gauss-Markov, state-space  models corresponding to an ASD plot for a range of delays.
+This article skips many derivations, many of which are presented or pointed to in \cite{CSM_IMU}.
+
+This methods herein apply to both gyros and accelerometers. 
+To be generic, the article will use the terminology of phase and frequency. 
+The term {\em frequency} refers to the either the IMU angular rate or specific force measurement.
+The term {\em phase} refers to the integral of frequency, which for an IMU refers to attitude or velocity. 
+
+Given values for the Allan Standard Deviation (ASD) parameters: $N$, $B$, $T_p$, and $F_s$, the script ASD\_to\_GaussMarkovFirstOrder.py available at \url{https://github.com/jaffarrell/AV-Matlab-SW.git} implements all the computations that are presented herein in a \blue blue \black font.  
+\end{abstract}
+
+\section{Introduction}
+Any real physical system is impossible to model perfectly. 
+Often such systems can be modeled sufficiently for a well-defined purpose by a linear system. 
+
+The purpose of the IMU error model is to communicate to an optimal state estimation routine, the accuracy of the IMU measurements so that can properly incorporate them into its data processing. One axis of the accelerometer (i.e., specific force) or gyro measurement in IMU frame can be modeled as
+\begin{align}
+	y(t) &= s(t) + z(t) + d(t)
+\end{align}
+where
+ $s(t)$ represents the signal (i.e., specific force or angular rate) the instrument is designed to measure, 
+ $z(t)$ represents the stochastic errors, and
+ $d(t)$ represents non-stochastic errors (e.g., scale factor, non-orthogonality, saturation).
+This document is only concerned with the stochastic errors: $z(t)$.
+The non-stochastic errors are addressed by other methods. 
+
+\subsection{ASD Parameters}
+Manufacturers often follow the IEEE standard \cite{} and specify their IMU's typical stochastic errors through either selected ASD parameters or and ASD plot (see Fig. \ref{fig:ASD_plot_N_B}). 
+Examples of important ASD paramters are:
+phase random walk $N$, bias instability $B$, and sample frequency $F_s$.
+
+
+\subsection{Stochastic Error: PSD and ASD}
+\label{sect:PSD-ASD}
+The Power Spectral Density (PSD) and ASD of the stochastic error $z(t)$ are directly related to each other. 
+The PSD can be represented as an infinite sum of terms:
+\begin{align}\label{eqn:PSD}
+	S_z(f) &= \cdots + N^2 + \frac{B^2}{2\,\pi\,f} + \frac{K^2}{(2\,\pi\,f)^2} + \cdots.
+\end{align}
+Each even term in this series can be perfectly represented by a finite dimensional continuous-time linear system. 
+For the odd terms, there is no finite dimensional linear system to represent any one of them. 
+Due to (1) our inability to model the odd terms and (2) there are an infinite number of even term, there does not exist a perfect finite dimensional linear system model for the IMU stochastic error. 
+
+Fortunately, due to the nature of the problem and good design by the manufacturer, only a few terms in the series are important. 
+\begin{itemize}
+	\item The navigation engineer, understanding aliasing and Nyquist frequency ideas will ensure that the sample frequency $F_s$ of the IMU is much larger that the bandwidth $BW$ of the vehicle on which it will be mounted (i.e., $F_s \gg BW$). 
+	The ASD plot has its smallest delay at the sampling period ($T_s = 1/F_s$). 
+	All important signal information is at much lower frequencies (much higher delays).
+	\item The manufacturer will ensure that the  measurement quantization error is much smaller that the instrument measurement noise. 
+	Therefore for high frequencies below $F_s$ (i.e., small delays above $T_s$) the phase white random walk noise ($N$) will dominate. 
+	\item At mid-to-lower frequencies (higher delays) time-correlated errors become important. For intermediate frequency ranges, the bias instability ($B$) and bias random walk ($K$) parameters are important.
+	\item The designer of the navigation system can include states in the system to model the time-correlated states. These are often referred to as time-varying bias estimates.  Because the navigation system can accurately estimate the low-frequency (long-delay) portion to the stochastic error, this portion of the PSD (or ASD) curve is not important.   
+\end{itemize}
+The $N$, $B$, and $K$ parameters can be selected (or approximated) directly from the ASD curve.
+
+\subsection{Finite Dimension, Gauss-Markov Model}
+Section \ref{sect:PSD-ASD} explained why, typically, only three parameter ($N$, $B$, and $K$) are necessary to model the stochastic errors over the frequency (delay) range of interest.
+However, due to the $B$ term, which appears as an odd-term in the PSD series of eqn. \eqref{sect:PSD-ASD}, these three terms theoretically still require an infinite order linear system model to model them exactly.
+
+More practically, the two $N$ and $K$ terms can be perfectly modeled by a first-order Gauss-Markov model.
+This $N$ and $K$ only model, may model the stochastic error well at short and long delays, but not adequately model it in the range of mid-range of delays corresponding to the flat portion of the ASD curve. 
+That flat portion is often more important to performance than the long delay portion. 
+The three $N$, $B$, and $K$ terms can often be adequately modeled, over the frequency (delay) range of interest, by a first-order Gauss-Markov model.
+
+\subsection{Why First-Order?}
+The order of the stochastic error model is important because the computational load of the matrix operations, for example in a Kalman filter, are $O(n^3)$ where $n$ is the order of the state vector.
+That state vector includes the vehicle state ($n_v = 9$), the number of states ($6\,n_d$ used to model $d(t)$, and the number of states ($6\,n_z$) needed to implement the model of $z(t)$. The factor of $6$ comes from the fact that the IMU has 6 measurements. 
+Therefore the computational load is on the order of $O\left(\left(n_v+6\,\left(n_d+n_z\right)\right)^3\right).$  
+
+The purpose of the Gauss-Markov model is to communicate to the estimation algorithm the frequency distribution (i.e., time-correlation structure) of the stochastic errors. 
+If the ASD plot over the important range of delays (or the PSD plot over the important range of frequencies) can be adequately represented by a first-order model, there is a high computational penalty for implementing a higher-order model. 
+
+\section{First-Order, Gauss-Markov Models}
+
+\subsection{Continuous-Time}
+
+\subsection{Discrete-time}
+
+\subsection{Parameter Choice for Equivalent Models}
+
+\section{ASD Graph to State-Space Model}
+
+This section assumes that an ASD plot is available. 
+Samples of an example ASD curve are shown as blue dots in the figures herein.
+\begin{enumerate}
+	\item Find the portion of the ASD graph that has a slope of -1/2. Draw a tangent line, and define \blue phase random walk parameter $N$ \black as the value of this ASD tangent line where it crosses the vertical line at $\tau = 1$. See the example orange lines in Fig. \ref{fig:ASD_plot_N_B}.
+	
+	\begin{figure}[htb]
+		\centering
+		\includegraphics[trim=0in 0in 0in 0.1in, clip, width=0.8\columnwidth]{figure/ASD_plot_N_B}
+		\caption{Allan Standard Deviation Plot marked for estimation of $N$ and $B$. 
+			The slanted orange line with slope -1/2 intersects the vertical line at $\tau=1$ for $N$ = 3.3e-3 m/s/s/rtHz. The horizontal dashed green line defines $B=8.0 e-3$ m/s/s. }
+		\label{fig:ASD_plot_N_B}
+	\end{figure}
+	
+	\item The continuous-time phase random walk power spectral density is \blue $S_n=N^2$. \black
+	\item The discrete-time phase random walk covariance is \blue $Q_\nu = S_n \, F_s$. \black
+	\item The values of $B$ and $T_p$ are selected together. 
+	\begin{itemize}
+		\item 	By definition $B$ is the value of the ASD plot at which its slope is zero. For many inexpensive IMU's this flat section may not exist or may be difficult to select due to the noisiness of the ASD plot. 
+		The ASD plot in Fig. \ref{fig:ASD_plot_N_B} is very clean and a reasonable value of $B$ can be read off. 
+		\item There is not finite-dimensional state space-model that can exactly reproduce the bias instabiility. See \cite{CSM_IMU}.
+		
+		\item This example selects the first-order model 
+		\begin{align} \label{eqn:GM}
+			\dot{b}(t) = -\mu \, b(t) + \omega(t)
+		\end{align}
+		to approximate the bias instability portion of the ASD plot. 
+		The shape of the ASD plot corresponding to this model is sketched as the green asymptotes and black curve in Fig. \ref{fig:ASD_plot_N_B}. 
+		It has a peak at $T_p$ and and the asymptotes have slope $\pm 1/2$;
+		therefore, for delays near, but smaller that $T_p$, the parameters $B$ and $T_p$ can be selected to produce a flat region with the desired height. 
+		Given values for $B$ and $T_p$, the script computes:
+		\begin{align*}
+		\blue T_b &= \blue \frac{T_p}{1.89}, \black && \mbox{a parameter for the ASD model} \\
+		\blue \mu &= \blue\frac{1}{T_b} \black  && \mbox{the decay rate in eqn. \eqref{eqn:GM}} \\
+		\blue S_b &= \blue\frac{B^2}{0.4365^2\,T_b} \black && \mbox{PSD of } \omega(t) \\
+		\blue \bar{P}_b & = \blue\frac{S_b}{2\,\mu} \black && \mbox{steady state covariance of } b(t) 
+		\end{align*}
+	\end{itemize}
+
+\end{enumerate}
+
+\begin{figure}[tbh]
+	\centering
+	\includegraphics[trim=0in 0in 0in 0.1in, clip, width=0.8\columnwidth]{figure/ASD_plot_B_GM}
+	\caption{Allan Standard Deviation Plot marked with approximations for the first-order Gauss-Markov model. }
+	\label{fig:ASD_plot_B_GM}
+\end{figure}
+
+The script also provides tools to convert the continuous-time model to and equivalent discrete-time model, to simulate the model of produce sample data, and to plot the Allan standard deviation plots. The red dots in Fig. \ref{fig:ASD_plot}  show the results of this process.
+
+
+\begin{figure}[tbh]
+	\centering
+	\includegraphics[trim=0in 0in 0in 0.1in, clip, width=0.9\columnwidth]{figure/ASD_plot}
+	\caption{Allan Standard Deviation Plot.}
+	\label{fig:ASD_plot}
+\end{figure}
+\vfill
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs.bib}
+\end{document}
