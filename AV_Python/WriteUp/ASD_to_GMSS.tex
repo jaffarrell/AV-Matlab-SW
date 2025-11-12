@@ -40,9 +40,11 @@ This document is only concerned with the stochastic errors: $z(t)$.
 The non-stochastic errors are addressed by other methods. 
 
 \subsection{ASD Parameters}
-Manufacturers often follow the IEEE standard \cite{} and specify their IMU's typical stochastic errors through either selected ASD parameters or and ASD plot (see Fig. \ref{fig:ASD_plot_N_B}). 
+Manufacturers often follow the IEEE standard \cite{} and specify their IMU's typical stochastic errors through either selected ASD parameters or and ASD plot. 
 Examples of important ASD paramters are:
 phase random walk $N$, bias instability $B$, and sample frequency $F_s$.
+An example ASD  plot is shown in Fig. \ref{fig:ASD_plot_N_B}.
+The method to read the ASD parameters from this plot is described in Section \ref{sect:ASD2SS}.
 
 
 \subsection{Stochastic Error: PSD and ASD}
@@ -68,6 +70,8 @@ Fortunately, due to the nature of the problem and good design by the manufacture
 \end{itemize}
 The $N$, $B$, and $K$ parameters can be selected (or approximated) directly from the ASD curve.
 
+
+
 \subsection{Finite Dimension, Gauss-Markov Model}
 Section \ref{sect:PSD-ASD} explained why, typically, only three parameter ($N$, $B$, and $K$) are necessary to model the stochastic errors over the frequency (delay) range of interest.
 However, due to the $B$ term, which appears as an odd-term in the PSD series of eqn. \eqref{sect:PSD-ASD}, these three terms theoretically still require an infinite order linear system model to model them exactly.
@@ -86,29 +90,78 @@ The purpose of the Gauss-Markov model is to communicate to the estimation algori
 If the ASD plot over the important range of delays (or the PSD plot over the important range of frequencies) can be adequately represented by a first-order model, there is a high computational penalty for implementing a higher-order model. 
 
 \section{First-Order, Gauss-Markov Models}
+\label{sect:GM}
+This section summarizes a few facts about first-order Gauss-Markov state-space models.
 
 \subsection{Continuous-Time}
+The continuous-time model has the form
+\begin{align}
+	z(t) &= b(t) + n(t), &&\mbox{ where } n(t)\sim \mathcal{N}(0,\,S_n)\\
+	\dot{b}(t) &= - \mu\,b(t) + \zeta(t), &&\mbox{ where } \zeta(t)\sim \mathcal{N}(0,\,S_\zeta),
+\end{align}
+and $\mu\ge0.$
+The symbols $n(t$) and $\zeta(t)$ represent independent, continuous-time, Gaussian, white noise processes with power spectral densities of $S_n$ and $S_\zeta$, respectively. 
+For the discussion herein, theses PSD's are assumed to be constant. 
+
+This model is discussed in Example 4.19 on p. 140 in \cite{farrell2008aided}, which shows that the time evolution of the $P(t) = cov(b(t))$ is described by
+\begin{align}
+	\dot{P}(t) &= -2\,\mu\, P(t) + S_\zeta.
+\end{align}
+In $t$ increases towards infinity, $\dot{P}(t)$ approaches 0, and $P(t)$ approaches
+\begin{align}
+	P_\infty = \frac{S_\zeta}{2 \, \mu}. \label{eqn:continuoussteadystatecov}
+\end{align}
+The model parameters (i.e., $\mu$, $S_n$, and $S_\zeta$) can be estimated from the ASD plot, as will be discussed in Section \ref{sect:ASD2SS}.
 
 \subsection{Discrete-time}
+The discrete-time model has the form
+\begin{align}
+	z_k &= b_k + n_k,               &&\mbox{ where } n_k\sim \mathcal{N}(0,\,\sigma_n^2)\\
+	{b}_{k+1} &= \phi \, b_k + \zeta_k, &&\mbox{ where } \zeta_k\sim \mathcal{N}(0,\,\sigma_\zeta^2).
+\end{align}
+The subscript $k$ on any variable denotes the value of the variable at the discrete instant of time $t_k = k\,T_s$, where $T_s>0$ is the IMU sampling rate. For example, $z_k=z(k\,T_s)$.
+The symbols $n_k$ and $\zeta_k$ represent independent, Gaussian, discrete-time, white noise processes with covariances of $\sigma_n^2$ and $\sigma_\zeta^2$, respectively. 
+For the discussion herein, theses covariances are assumed to be constant. 
+
+The time evolution of the $P_k = cov(b_k)$ is described by
+\begin{align}
+	{P}_{k+1} &= \phi^2\, P_k + \sigma_\zeta^2.
+\end{align}
+In $k$ increases towards infinity, a steady-state is reached wherein $P_{k+1}=P_k$; therefore, the stead-state covariance satisfies
+\begin{align}
+	P_\infty = \frac{\sigma_\zeta^2}{1-\phi^2}. \label{eqn:discretesteadystatecov}
+\end{align}
+The parameters (i.e., $\phi$, $\sigma_n^2$, and $\sigma_\zeta^2$) are discussed in Section \ref{sect:SSequivalence}.
+	
+\begin{figure}[b]
+	\centering
+	\includegraphics[trim=0in 0in 0in 0.1in, clip, width=0.8\columnwidth]{figure/ASD_plot_N_B}
+	\caption{Allan Standard Deviation Plot marked for estimation of $N$ and $B$. 
+		The slanted orange line with slope -1/2 intersects the vertical line at $\tau=1$ for $N$ = 3.3e-3 m/s/s/rtHz. The horizontal dashed green line defines $B=8.0 e-3$ m/s/s. }
+	\label{fig:ASD_plot_N_B}
+\end{figure}
 
 \subsection{Parameter Choice for Equivalent Models}
+\label{sect:SSequivalence}
+The continuous and discrete-time models will represent equivalent models in the sense that their noise statistics are equal at the times $t_k = k\,T_s$ if the discrete-time model parameters are selected as 
+\begin{align}
+	\phi = \exp(-\mu\,Ts)\mbox{ and }
+	\sigma_\zeta^2 = \frac{1-\phi^2}{2\,\mu}\,S_\zeta.
+\end{align}
+Appendix \ref{sect:unitanalysis} presents a unit analysis to check the final equation. 
+
+
 
 \section{ASD Graph to State-Space Model}
-
-This section assumes that an ASD plot is available. 
+\label{sect:ASD2SS}
+This section discusses how to define the parameters of the continuous-time state-space model from an ASD plot. 
 Samples of an example ASD curve are shown as blue dots in the figures herein.
 \begin{enumerate}
-	\item Find the portion of the ASD graph that has a slope of -1/2. Draw a tangent line, and define \blue phase random walk parameter $N$ \black as the value of this ASD tangent line where it crosses the vertical line at $\tau = 1$. See the example orange lines in Fig. \ref{fig:ASD_plot_N_B}.
+	\item Find the portion of the ASD graph that has a slope of -1/2. Draw a tangent line, and define phase random walk parameter \blue $N$ \black as the value of this ASD tangent line where it crosses the vertical line at $\tau = 1$. See the example orange lines in Fig. \ref{fig:ASD_plot_N_B}.
+
 	
-	\begin{figure}[htb]
-		\centering
-		\includegraphics[trim=0in 0in 0in 0.1in, clip, width=0.8\columnwidth]{figure/ASD_plot_N_B}
-		\caption{Allan Standard Deviation Plot marked for estimation of $N$ and $B$. 
-			The slanted orange line with slope -1/2 intersects the vertical line at $\tau=1$ for $N$ = 3.3e-3 m/s/s/rtHz. The horizontal dashed green line defines $B=8.0 e-3$ m/s/s. }
-		\label{fig:ASD_plot_N_B}
-	\end{figure}
+	\item The continuous-time phase random walk power spectral density is \blue $S_n=N^2$. \black See eqn. (22) in \cite{CSM_IMU}.
 	
-	\item The continuous-time phase random walk power spectral density is \blue $S_n=N^2$. \black
 	\item The discrete-time phase random walk covariance is \blue $Q_\nu = S_n \, F_s$. \black
 	\item The values of $B$ and $T_p$ are selected together. 
 	\begin{itemize}
@@ -128,7 +181,7 @@ Samples of an example ASD curve are shown as blue dots in the figures herein.
 		\begin{align*}
 		\blue T_b &= \blue \frac{T_p}{1.89}, \black && \mbox{a parameter for the ASD model} \\
 		\blue \mu &= \blue\frac{1}{T_b} \black  && \mbox{the decay rate in eqn. \eqref{eqn:GM}} \\
-		\blue S_b &= \blue\frac{B^2}{0.4365^2\,T_b} \black && \mbox{PSD of } \omega(t) \\
+		\blue S_\zeta &= \blue\frac{B^2}{0.4365^2\,T_b} \black && \mbox{PSD of } \omega(t) \\
 		\blue \bar{P}_b & = \blue\frac{S_b}{2\,\mu} \black && \mbox{steady state covariance of } b(t) 
 		\end{align*}
 	\end{itemize}
@@ -155,4 +208,52 @@ The script also provides tools to convert the continuous-time model to and equiv
 
 \bibliographystyle{IEEEtran}
 \bibliography{refs.bib}
+
+\vfill
+\clearpage
+\appendix
+
+\section{Unit Analysis:Check}
+\label{sect:unitanalysis}
+The equation 
+\begin{align}\label{eqn:discrete_cov}
+	\sigma_\zeta^2 = \frac{1-\phi^2}{2\,\mu}\,S_\zeta
+\end{align}
+from Section \ref{sect:SSequivalence} is derived by setting eqn. \eqref{eqn:continuoussteadystatecov} equal to  eqn. \eqref{eqn:discretesteadystatecov}.
+
+To get comfortable with this equation and with the (sometimes confusing) units associated with PSD's, it is useful to perform an analysis of the units of each term in this equation. 
+\begin{description}
+	\item[Gyro: ] The units of the bias are $rad/s$. 
+	The covariance $P$ has units $(rad/s)^2$. 
+	Therefore, from eqn. \eqref{eqn:discretesteadystatecov}, the units of $\sigma_\zeta^2$ are also $(rad/sec)^2$, because all summed items have the same units.
+	The time derivative of the covariance $\dot P$ has units $\frac{(rad/s)^2}{s}$. 
+	Therefore, each term being added in eqn. \eqref{eqn:continuoussteadystatecov} including the PSD $S_\zeta$ has these same units. The numerator $(1-\phi^2)$ has not units. 
+	The denominator $(2\,\mu)$ has units of reciprocal seconds. 
+	The units of the product on the right-hand side are thus the units of $S_\zeta$ (i.e., $\frac{(rad/s)^2}{s}$) divided by the units of $\mu$ (i.e., $\frac{1}{s}$), which yields $(rad/s)^2$. 
+	
+	\item[Acccelerometer: ] The units of the bias are $m/s^2$. 
+	The covariance $P$ has units $(m/s^2)^2$. 
+	Therefore, from eqn. \eqref{eqn:discretesteadystatecov}, the units of $\sigma_\zeta^2$ are also $(m/s^2)^2$, because all summed items have the same units.
+	The time derivative of the covariance $\dot P$ has units $\frac{(m/s^2)^2}{s}$. 
+	Therefore, each term being added in eqn. \eqref{eqn:continuoussteadystatecov} including the PSD $S_\zeta$ has these same units. The numerator $(1-\phi^2)$ has not units. The denominator $(2\,\mu)$ has units of reciprocal seconds. 
+	The units of the product on the right-hand side are thus the units of $S_\zeta$ (i.e., $\frac{(m/s^2)^2}{s}$) divided by the units of $\mu$ (i.e., $\frac{1}{s}$), which yields $(m/s^2)^2$. 
+\end{description}
+In both cases, the unit analysis shows that both the left and right sides of equation \ref{eqn:discrete_cov} have the same units (as they should). 
+
+\section{Approximate Discrete-Time Driving Covariance}
+Due to the fact that $\phi=exp(-\mu\,T_s)$,
+\begin{align*}
+	1-\phi^2 &= 1 - \left(1 + (-2\,\mu\,T_s) + 0.5 (-2\,\mu\,T_s)^2 + \ldots \right) \\
+	 &=  2\,\mu\,T_s - 0.5 (2\,\mu\,T_s)^2 + \ldots.
+\end{align*}
+When $\mu\,T_s \ll 1,$ which is typically the case by design, because the sample period $T_s$ is much less than the correlation time of the IMU bias, the higher-order terms are small and may be dropped:
+\begin{align*}
+	1-\phi^2 &\approx  2\,\mu\,T_s .
+\end{align*}
+In this case, eqn. \eqref{eqn:discrete_cov} simplifies to 
+\begin{align}\label{eqn:discrete_cov_approx}
+	\sigma_\zeta^2 \approx \frac{2\,\mu\,T_s}{2\,\mu}\,S_\zeta = T_s \, S_\zeta.
+\end{align}
+
+
 \end{document}
